@@ -56,10 +56,10 @@ export default function Navbar({ activeTab, setActiveTab, isLiveBackend }) {
         <div className="nav-actions">
           <div 
             className="status-badge" 
-            title={isLiveBackend ? "Connected to Spring Boot API on port 8080" : "Running on Intelligent Client Engine with Spring Boot Fallback"}
+            title={isLiveBackend ? "Connected to Live Backend API" : "Running on Intelligent Client Engine with Live Backend Fallback"}
           >
             <span className={`status-dot ${isLiveBackend ? 'online' : 'demo'}`}></span>
-            <span>{isLiveBackend ? 'Spring Boot 8080' : 'Predictor Engine Active'}</span>
+            <span>{isLiveBackend ? 'Live Backend API' : 'Predictor Engine Active'}</span>
           </div>
 
           <button 

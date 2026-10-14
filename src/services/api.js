@@ -1,10 +1,22 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8080/api';
+// Resolve API base URL: Supports Vercel environment variable VITE_API_BASE_URL
+const resolveApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '');
+  }
+  if (import.meta.env.DEV) {
+    return 'http://localhost:8080/api';
+  }
+  // Production fallback on Vercel if no external API URL is specified
+  return '/api';
+};
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 const client = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 3000,
+  timeout: 4000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -247,7 +259,10 @@ export const apiService = {
   async checkBackendHealth() {
     try {
       const res = await client.get('/predictions/dashboard');
-      return { isOnline: true, data: res.data };
+      if (res.data && typeof res.data === 'object' && typeof res.data !== 'string' && res.data.totalPredictions !== undefined) {
+        return { isOnline: true, data: res.data };
+      }
+      return { isOnline: false };
     } catch {
       return { isOnline: false };
     }
@@ -256,7 +271,10 @@ export const apiService = {
   async getDashboardSummary() {
     try {
       const res = await client.get('/predictions/dashboard');
-      return { data: res.data, isLive: true };
+      if (res.data && typeof res.data === 'object' && typeof res.data !== 'string' && (res.data.totalPredictions !== undefined || res.data.recentPredictions !== undefined)) {
+        return { data: res.data, isLive: true };
+      }
+      throw new Error('Invalid backend response');
     } catch {
       const totalStudents = mockStudents.length;
       const totalPredictions = mockPredictions.length;
@@ -285,7 +303,10 @@ export const apiService = {
   async getAllPredictions() {
     try {
       const res = await client.get('/predictions');
-      return { data: res.data, isLive: true };
+      if (Array.isArray(res.data)) {
+        return { data: res.data, isLive: true };
+      }
+      throw new Error('Invalid predictions response');
     } catch {
       return { data: mockPredictions, isLive: false };
     }
@@ -294,9 +315,12 @@ export const apiService = {
   async createPrediction(request) {
     try {
       const res = await client.post('/predictions/predict', request);
-      mockPredictions = [res.data, ...mockPredictions.filter(p => p.id !== res.data.id)];
-      persistPredictions(mockPredictions);
-      return { data: res.data, isLive: true };
+      if (res.data && typeof res.data === 'object' && typeof res.data !== 'string' && res.data.predictedScore !== undefined) {
+        mockPredictions = [res.data, ...mockPredictions.filter(p => p.id !== res.data.id)];
+        persistPredictions(mockPredictions);
+        return { data: res.data, isLive: true };
+      }
+      throw new Error('Invalid prediction response from backend');
     } catch {
       const newPrediction = calculateLocalPrediction(request);
       mockPredictions = [newPrediction, ...mockPredictions];
@@ -308,7 +332,10 @@ export const apiService = {
   async getAllStudents() {
     try {
       const res = await client.get('/students');
-      return { data: res.data, isLive: true };
+      if (Array.isArray(res.data)) {
+        return { data: res.data, isLive: true };
+      }
+      throw new Error('Invalid students response');
     } catch {
       return { data: mockStudents, isLive: false };
     }
@@ -317,9 +344,12 @@ export const apiService = {
   async createStudent(student) {
     try {
       const res = await client.post('/students', student);
-      mockStudents = [res.data, ...mockStudents];
-      persistStudents(mockStudents);
-      return { data: res.data, isLive: true };
+      if (res.data && typeof res.data === 'object' && typeof res.data !== 'string' && res.data.id) {
+        mockStudents = [res.data, ...mockStudents];
+        persistStudents(mockStudents);
+        return { data: res.data, isLive: true };
+      }
+      throw new Error('Invalid student response');
     } catch {
       const nextId = mockStudents.length > 0 ? Math.max(...mockStudents.map(s => s.id || 0)) + 1 : 1;
       const newStudent = {
@@ -336,10 +366,13 @@ export const apiService = {
 
   async deleteStudent(id) {
     try {
-      await client.delete(`/students/${id}`);
-      mockStudents = mockStudents.filter(s => s.id !== id);
-      persistStudents(mockStudents);
-      return { success: true, isLive: true };
+      const res = await client.delete(`/students/${id}`);
+      if (res && res.status >= 200 && res.status < 300) {
+        mockStudents = mockStudents.filter(s => s.id !== id);
+        persistStudents(mockStudents);
+        return { success: true, isLive: true };
+      }
+      throw new Error('Delete failed');
     } catch {
       mockStudents = mockStudents.filter(s => s.id !== id);
       persistStudents(mockStudents);
